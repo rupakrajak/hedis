@@ -45,12 +45,13 @@ data CommandInfo = CommandInfo
 
 instance RedisResult CommandInfo where
     decode (MultiBulk (Just
-        [ Bulk (Just commandName)
-        , Integer aritySpec
-        , MultiBulk (Just replyFlags)
-        , Integer firstKeyPos
-        , Integer lastKeyPos
-        , Integer replyStepCount])) = do
+        ( Bulk (Just commandName)
+        : Integer aritySpec
+        : MultiBulk (Just replyFlags)
+        : Integer firstKeyPos
+        : Integer lastKeyPos
+        : Integer replyStepCount
+        : _))) = do
             parsedFlags <- mapM parseFlag replyFlags
             lastKey <- parseLastKeyPos
             return $ CommandInfo

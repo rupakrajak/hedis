@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards, FlexibleContexts, DuplicateRecordFields #-}
 
 module Database.Redis.ManualCommands where
 
@@ -850,7 +850,6 @@ instance RedisResult StreamsRecord where
 data XReadOpts = XReadOpts
     { block :: Maybe Integer
     , recordCount :: Maybe Integer
-    , noack :: Bool
     } deriving (Show, Eq)
 
 -- |Redis default 'XReadOpts'. Equivalent to omitting all optional parameters.
@@ -859,12 +858,30 @@ data XReadOpts = XReadOpts
 -- XReadOpts
 --     { block       = Nothing -- Don't block waiting for more records
 --     , recordCount = Nothing -- no record count
---     , noack       = False -- Add read records to the PEL if acknowledgement is not received
 --     }
 -- @
 --
 defaultXreadOpts :: XReadOpts
-defaultXreadOpts = XReadOpts { block = Nothing, recordCount = Nothing, noack = False}
+defaultXreadOpts = XReadOpts { block = Nothing, recordCount = Nothing }
+
+data XReadGroupOpts = XReadGroupOpts
+    { block :: Maybe Integer
+    , recordCount :: Maybe Integer
+    , noack :: Bool
+    } deriving (Show, Eq)
+
+-- |Redis default 'XReadGroupOpts'. Equivalent to omitting all optional parameters.
+--
+-- @
+-- XReadGroupOpts
+--     { block       = Nothing -- Don't block waiting for more records
+--     , recordCount = Nothing -- no record count
+--     , noack       = False -- Add read records to the PEL if acknowledgement is not received
+--     }
+-- @
+--
+defaultXreadGroupOpts :: XReadGroupOpts
+defaultXreadGroupOpts = XReadGroupOpts { block = Nothing, recordCount = Nothing, noack = False }
 
 data XReadResponse = XReadResponse
     { stream :: ByteString
@@ -887,11 +904,10 @@ xreadOpts streamsAndIds opts = sendRequest $
 
 internalXreadArgs :: [(ByteString, ByteString)] -> XReadOpts -> [ByteString]
 internalXreadArgs streamsAndIds XReadOpts{..} =
-    concat [blockArgs, countArgs, noackArgs, ["STREAMS"], streams, recordIds]
+    concat [blockArgs, countArgs, ["STREAMS"], streams, recordIds]
     where
         blockArgs = maybe [] (\blockMillis -> ["BLOCK", encode blockMillis]) block
         countArgs = maybe [] (\countRecords -> ["COUNT", encode countRecords]) recordCount
-        noackArgs = if noack == False then [] else ["NOACK"] -- NOACK supported only for xreadgroup calls
         streams = map (\(stream, _) -> stream) streamsAndIds
         recordIds = map (\(_, recordId) -> recordId) streamsAndIds
 
@@ -907,10 +923,20 @@ xreadGroupOpts
     => ByteString -- ^ group name
     -> ByteString -- ^ consumer name
     -> [(ByteString, ByteString)] -- ^ (stream, id) pairs
-    -> XReadOpts -- ^ Options
+    -> XReadGroupOpts -- ^ Options
     -> m (f (Maybe [XReadResponse]))
 xreadGroupOpts groupName consumerName streamsAndIds opts = sendRequest $
-    ["XREADGROUP", "GROUP", groupName, consumerName] ++ (internalXreadArgs streamsAndIds opts)
+    ["XREADGROUP", "GROUP", groupName, consumerName] ++ (internalXreadGroupArgs streamsAndIds opts)
+
+internalXreadGroupArgs :: [(ByteString, ByteString)] -> XReadGroupOpts -> [ByteString]
+internalXreadGroupArgs streamsAndIds XReadGroupOpts{..} =
+    concat [blockArgs, countArgs, noackArgs, ["STREAMS"], streams, recordIds]
+    where
+        blockArgs = maybe [] (\blockMillis -> ["BLOCK", encode blockMillis]) block
+        countArgs = maybe [] (\countRecords -> ["COUNT", encode countRecords]) recordCount
+        noackArgs = if noack == False then [] else ["NOACK"] -- NOACK supported only for xreadgroup calls
+        streams = map (\(stream, _) -> stream) streamsAndIds
+        recordIds = map (\(_, recordId) -> recordId) streamsAndIds
 
 xreadGroup
     :: (RedisCtx m f)
@@ -918,7 +944,7 @@ xreadGroup
     -> ByteString -- ^ consumer name
     -> [(ByteString, ByteString)] -- ^ (stream, id) pairs
     -> m (f (Maybe [XReadResponse]))
-xreadGroup groupName consumerName streamsAndIds = xreadGroupOpts groupName consumerName streamsAndIds defaultXreadOpts
+xreadGroup groupName consumerName streamsAndIds = xreadGroupOpts groupName consumerName streamsAndIds defaultXreadGroupOpts
 
 xgroupCreate
     :: (RedisCtx m f)

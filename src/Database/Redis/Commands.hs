@@ -226,7 +226,9 @@ strlen, -- |Get the length of the value stored in a key (<http://redis.io/comman
 
 -- ** Streams
 XReadOpts(..),
+XReadGroupOpts(..),
 defaultXreadOpts,
+defaultXreadGroupOpts,
 XReadResponse(..),
 StreamsRecord(..),
 TrimOpts(..),
